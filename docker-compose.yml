@@ -1,12 +1,10 @@
 version: '3.8'
 
 services:
-  localai:
-    image: quay.io/go-skynet/local-ai:latest
+  emotion-app:
+    build: .
     ports:
-      - "8080:8080"
+      - "8501:8501"
     volumes:
-      - ./models:/models
-      - ./config:/build
-    environment:
-      - MODELS_PATH=/models
+      - ./dictionaries:/app/dictionaries
+    command: streamlit run app.py --server.address=0.0.0.0 --server.port=8501
