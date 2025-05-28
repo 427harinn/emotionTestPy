@@ -1,6 +1,23 @@
 import streamlit as st
 from janome.tokenizer import Tokenizer
 import csv
+import os
+from striprtf.striprtf import rtf_to_text
+
+def load_custom_dicts():
+    emotions = ["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]
+    emotion_dict = {}
+    for emotion in emotions:
+        filename = f"custom_dictionaries/{emotion}.rtf"
+        if os.path.exists(filename):
+            with open(filename, encoding="utf-8") as f:
+                rtf_content = f.read()
+                plain_text = rtf_to_text(rtf_content)
+                words = [line.strip() for line in plain_text.splitlines() if line.strip()]
+                emotion_dict[emotion] = words
+        else:
+            emotion_dict[emotion] = []
+    return emotion_dict
 
 def load_dicts():
     with open("dictionaries/pn.csv.m3.120408.trim", encoding="utf-8") as f:
@@ -20,8 +37,11 @@ def userfeeling(user, textbox, textbox2, feeldic):
     feel = [0, 0, 0, 0, 0, 0, 0]  # sad, afraid, angry, hate, trust, surprise, happy
     wow = 1 + user.count("!") + user.count("！")
 
-    for i, box in enumerate([["悲", "死", "泣"], ["怖", "助けて"], ["怒", "殺"], ["不快", "嫌"], ["信", "好き"], ["驚", "すごい"], ["楽しい", "嬉しい"]]):
-        feel[i] += sum(user.count(word) for word in box) * wow
+    # 自作辞書（文全体に完全一致）で感情スコアを加算
+    for i, emotion in enumerate(["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]):
+        check = sum(1 for keyword in custom_dict[emotion] if keyword in user)
+        if check > 0:
+            feel[i] += check * wow
 
     npwordcount = 0
     feelwordcount = 0
@@ -67,6 +87,7 @@ user_input = st.text_area("文章を入力してください")
 
 if st.button("分析する"):
     textbox, textbox2, feeldic = load_dicts()
+    custom_dict = load_custom_dicts()
     pleasure, feel = userfeeling(user_input, textbox, textbox2, feeldic)
     emotion_labels = ["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "興奮", "喜び"]
 

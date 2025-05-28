@@ -1,3 +1,4 @@
 janome
 pandas
 streamlit
+striprtf
