@@ -6,5 +6,5 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./dictionaries:/app/dictionaries
+      - ./:/app
     command: streamlit run app.py --server.address=0.0.0.0 --server.port=8501
