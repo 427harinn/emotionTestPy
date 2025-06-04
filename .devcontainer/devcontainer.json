@@ -1,0 +1,10 @@
+{
+  "name": "Emotion Analysis App",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "emotion-app",
+  "extensions": [
+    "ms-python.python"
+  ],
+  "workspaceFolder": "/app",
+  "forwardPorts": [8501]
+}

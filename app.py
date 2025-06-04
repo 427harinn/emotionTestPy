@@ -4,6 +4,7 @@ import csv
 import os
 from striprtf.striprtf import rtf_to_text
 
+# 自作辞書読み込み（RTF版）
 def load_custom_dicts():
     emotions = ["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]
     emotion_dict = {}
@@ -19,6 +20,7 @@ def load_custom_dicts():
             emotion_dict[emotion] = []
     return emotion_dict
 
+# 極性辞書・感情辞書読み込み
 def load_dicts():
     with open("dictionaries/pn.csv.m3.120408.trim", encoding="utf-8") as f:
         textbox = [s.rstrip() for s in f if s.count("\t") >= 2]
@@ -32,50 +34,109 @@ def load_dicts():
 
     return textbox, textbox2, feeldic
 
-def userfeeling(user, textbox, textbox2, feeldic):
+# 否定判定ユーティリティ
+def check_negation(idx, token_list):
+    negate = False
+
+    if idx+1 < len(token_list):
+        next_token = token_list[idx+1]
+        if next_token.surface in ["ない", "ぬ"] or next_token.base_form in ["ない", "ぬ"]:
+            negate = True
+
+    if idx+2 < len(token_list):
+        if (token_list[idx+1].surface == "く" and token_list[idx+2].surface in ["ない", "ぬ"]):
+            negate = True
+
+    if idx+3 < len(token_list):
+        if (token_list[idx+1].surface == "く" and token_list[idx+2].surface == "は" and token_list[idx+3].surface in ["ない", "ぬ"]):
+            negate = True
+
+    if idx+2 < len(token_list):
+        if (token_list[idx+1].surface in ["では", "じゃ", "だ", "で"] and token_list[idx+2].surface in ["ない", "ぬ"]):
+            negate = True
+
+    return negate
+
+# 感情分析処理
+def userfeeling(user, textbox, textbox2, feeldic, custom_dict):
     pleasure = 0.0
     feel = [0, 0, 0, 0, 0, 0, 0]  # sad, afraid, angry, hate, trust, surprise, happy
     wow = 1 + user.count("!") + user.count("！")
 
-    # 自作辞書（文全体に完全一致）で感情スコアを加算
-    for i, emotion in enumerate(["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]):
-        check = sum(1 for keyword in custom_dict[emotion] if keyword in user)
-        if check > 0:
-            feel[i] += check * wow
-
+    t = Tokenizer()
+    token_list = list(t.tokenize(user))
     npwordcount = 0
     feelwordcount = 0
-    t = Tokenizer()
-    for token in t.tokenize(user):
+
+    # 自作辞書も否定反転を考慮して処理
+    for idx, token in enumerate(token_list):
+        surface = token.surface
+        base = token.base_form  # ← 追加
+        for i, emotion in enumerate(["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]):
+            if any(keyword in [surface, base] for keyword in custom_dict[emotion]):
+                score = 1 * wow
+                if check_negation(idx, token_list):
+                    score *= -1
+                feel[i] += score
+
+
+    for idx, token in enumerate(token_list):
         surface = token.surface
         part = token.part_of_speech
-        if surface in ["いい", "し"]: continue
-        if "助詞" in part or "助動詞" in part or "非自立" in part: continue
+        base = token.base_form
 
+        if surface in ["いい", "し"]:
+            continue
+        if "助詞" in part or "助動詞" in part or "非自立" in part:
+            continue
+
+        # 極性辞書
         for line in textbox:
             word, negaposi, *_ = line.split("\t")
-            if surface == word:
+            if surface == word or base == word:
                 npwordcount += 1
-                if negaposi == "p": pleasure += 0.3 * wow
-                elif negaposi == "n": pleasure += -0.3 * wow
-                elif negaposi == "?p?n": pleasure += 0.1 * wow
+                score = 0
+                if negaposi == "p":
+                    score = 0.3 * wow
+                elif negaposi == "n":
+                    score = -0.3 * wow
+                elif negaposi == "?p?n":
+                    score = 0.1 * wow
+
+                if check_negation(idx, token_list):
+                    score *= -1
+
+                pleasure += score
                 break
         else:
             for line in textbox2:
                 if f"\t{surface}" in line:
                     negaposi, word = line.split("\t")
                     npwordcount += 1
-                    if "ポジ" in negaposi: pleasure += 0.3 * wow
-                    elif "ネガ" in negaposi: pleasure += -0.3 * wow
+                    score = 0
+                    if "ポジ" in negaposi:
+                        score = 0.3 * wow
+                    elif "ネガ" in negaposi:
+                        score = -0.3 * wow
+
+                    if check_negation(idx, token_list):
+                        score *= -1
+
+                    pleasure += score
                     break
 
-        for row in feeldic:
-            if surface in row:
+        # 感情辞書 (否定反転をここにも適用)
+        for i, emotion_row in enumerate(feeldic):
+            if surface in emotion_row:
                 feelwordcount += 1
-                for i in range(7):
-                    feel[i] += float(row[i+1]) * wow
+                for j in range(7):
+                    score = float(emotion_row[j+1]) * wow
+                    if check_negation(idx, token_list):
+                        score *= -1
+                    feel[j] += score
 
-    if npwordcount: pleasure /= npwordcount
+    if npwordcount:
+        pleasure /= npwordcount
     if feelwordcount:
         feel = [f / feelwordcount for f in feel]
 
@@ -88,14 +149,12 @@ user_input = st.text_area("文章を入力してください")
 if st.button("分析する"):
     textbox, textbox2, feeldic = load_dicts()
     custom_dict = load_custom_dicts()
-    pleasure, feel = userfeeling(user_input, textbox, textbox2, feeldic)
+    pleasure, feel = userfeeling(user_input, textbox, textbox2, feeldic, custom_dict)
     emotion_labels = ["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "興奮", "喜び"]
 
-    # 表示部分をCLI風に変換
     st.text(f"送信: {user_input}")
-    st.text(f"想定: {pleasure:.2f} {feel}")
+    st.text(f"ネガポジ: {pleasure:.2f}")
 
-    # 感情強度の評価語を決定
     max_value = max(feel)
     if max_value >= 1:
         howmatch = "とても"
@@ -106,7 +165,6 @@ if st.button("分析する"):
     else:
         howmatch = ""
 
-    # ポジネガ判定
     if pleasure == 0:
         sent_type = "平常 且つ "
     elif pleasure > 0:
@@ -117,15 +175,29 @@ if st.button("分析する"):
     main_emotion_index = feel.index(max(feel))
     main_emotion = emotion_labels[main_emotion_index]
 
-    # 一番強い感情を0にして次に強いものを探す
     feel[main_emotion_index] = 0
     second_emotion_index = feel.index(max(feel))
     second_emotion = emotion_labels[second_emotion_index]
+#    if max_value != 0:
+#        st.text(f"{sent_type}{main_emotion}が{howmatch}強い文章です。次に{second_emotion}が強いです。")
+#    else:
+#        st.text(f"{sent_type}無感情です。")
 
-    # 表示
-    if max_value != 0:
-        st.text(f"{sent_type}{main_emotion}が{howmatch}強い文章です。次に{second_emotion}が強いです。")
-    else:
-        st.text(f"{sent_type}無感情です。")
+
+    # 感情スコアを高い順に並べる
+    sorted_emotions = sorted(zip(emotion_labels, feel), key=lambda x: x[1], reverse=True)
+
+    # 最大・最小は並べ替えた後で判定
+    max_value = sorted_emotions[0][1]
+    min_value = sorted_emotions[-1][1]
+
+    for i, (label, score) in enumerate(sorted_emotions):
+        color = "black"
+        if score == max_value:
+            color = "red"
+        elif score == min_value:
+            color = "blue"
+        st.markdown(f"<span style='color:{color}; font-weight:bold'>{label}: {score:.3f}</span>", unsafe_allow_html=True)
+
 
 
