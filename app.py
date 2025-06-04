@@ -52,19 +52,29 @@ def check_negation(idx, token_list):
             negate = True
     return negate
 
+NEGATIONS = ["ない", "ぬ", "くない", "くはない", "ではない", "じゃない"]
 # 感情分析処理
 def userfeeling(user, textbox, textbox2, feeldic, custom_dict):
     pleasure = 0.0
     feel = [0, 0, 0, 0, 0, 0, 0]
     wow = 1 + user.count("!") + user.count("！")
 
-    # ✅ ✅ 自作辞書 (平文一致で判定)
+    # ✅ ✅ 自作辞書 (平文一致＋否定反転判定)
     for i, emotion in enumerate(["悲しみ", "恐怖", "怒り", "嫌悪", "信頼", "驚き", "喜び"]):
         for keyword in custom_dict[emotion]:
             if keyword in user:
-                feel[i] += 1 * wow
+                # 否定判定
+                negate = False
+                for neg in NEGATIONS:
+                    if keyword + neg in user:
+                        negate = True
+                        break
+                score = 1 * wow
+                if negate:
+                    score *= -1
+                feel[i] += score
 
-    # 以降は形態素解析＋否定反転
+    # 以下は形態素解析パート（そのまま）
     t = Tokenizer()
     token_list = list(t.tokenize(user))
     npwordcount = 0
@@ -125,7 +135,6 @@ def userfeeling(user, textbox, textbox2, feeldic, custom_dict):
         feel = [f / feelwordcount for f in feel]
 
     return pleasure, feel
-
 # === Streamlit UI ===
 st.title("感情分析Webアプリ")
 user_input = st.text_area("文章を入力してください")
