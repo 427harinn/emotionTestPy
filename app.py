@@ -153,9 +153,12 @@ if st.button("分析する"):
     max_value = sorted_emotions[0][1]
     min_value = sorted_emotions[-1][1]
 
-    for i, (label, score) in enumerate(sorted_emotions):
-        color = "black"
-        if score == max_value:
-            color = "red"
+    output_lines = []
 
-        st.markdown(f"<span style='color:{color}; font-weight:bold'>{label}: {score:.3f}</span>", unsafe_allow_html=True)
+    for i, (label, score) in enumerate(sorted_emotions):
+        output_lines.append(f"{label}: {score:.3f}")
+
+    # 出力を縦でまとめる (でもStreamlitの自動改行は使わない)
+    st.text("\n".join(output_lines))
+
+
