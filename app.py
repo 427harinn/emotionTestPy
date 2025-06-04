@@ -3,6 +3,7 @@ from janome.tokenizer import Tokenizer
 import csv
 import os
 from striprtf.striprtf import rtf_to_text
+import pandas as pd 
 
 # 自作辞書読み込み（平文一致用）
 def load_custom_dicts():
@@ -153,12 +154,26 @@ if st.button("分析する"):
     max_value = sorted_emotions[0][1]
     min_value = sorted_emotions[-1][1]
 
+
+
+
+
+
+
+    # 出力整形（1列のみのDataFrame）
     output_lines = []
 
     for i, (label, score) in enumerate(sorted_emotions):
-        output_lines.append(f"{label}: {score:.3f}")
+        output_lines.append(f"{label}: {score:.4f}")
 
-    # 出力を縦でまとめる (でもStreamlitの自動改行は使わない)
-    st.text("\n".join(output_lines))
+    df = pd.DataFrame(output_lines, columns=["感情スコア"])
+
+    # インデックス消して表示（番号出さない！）
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+
+
+
 
 
